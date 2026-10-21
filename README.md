@@ -6,6 +6,27 @@ Method change: the improved model now also selects its classifier by 5-fold cros
 
 Dependencies: numpy, scipy, scikit-learn, matplotlib.
 
+## Results (latest run)
+
+On 20 Newsgroups (4 categories, 965 test documents), the attention-weighted initialization of 200 new tokens reached macro-F1 0.826 versus 0.788 for the mean-of-context baseline, a gain of 0.037 that also bundled a CV-tuned LR/RBF-SVM classifier search.
+
+| Metric | Value |
+|---|---|
+| baseline_score | 0.7883 |
+| improved_score | 0.8255 |
+| improvement | 0.0372 |
+| baseline_score_std | 0.00773 |
+| improved_score_std | 0.0008234 |
+| baseline_accuracy | 0.7883 |
+| improved_accuracy | 0.8235 |
+| baseline_accuracy_std | 0.007631 |
+| improved_accuracy_std | 0.000977 |
+| n_new_tokens | 200 |
+
+Run on 2026-10-21. Full output: [results.json](results.json) · [run.log](run.log)
+
+Notes: New-token vectors are frozen initialisations (no fine-tuning). The paper's exact token-distillation architecture is not given, so the attention is a PPMI-softmax proxy. Only the 4 categories are used and the base embeddings come from the other 16 categories. The improved model differs from the baseline in the initialisation and in the CV-tuned classifier search (LR vs RBF-SVM); the baseline classifier is unchanged. Mean +/- std over seeds 42-44 (SVD and CV folds); the train/test split is fixed. Test set is used only for final scoring.
+
 ## Reference
 
 This project is motivated by the following paper:
