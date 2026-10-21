@@ -1,6 +1,7 @@
 """Does attention-weighted initialisation of new-token embeddings beat mean-of-context
 initialisation on a 4-category 20 Newsgroups task? Baseline and improved models share
-all code except the new-token initialisation step."""
+all code except the new-token initialisation step and the downstream classifier search
+(the improved model additionally tunes an RBF-SVM against logistic regression by CV on train)."""
 import json
 import os
 import re
@@ -20,8 +21,9 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
 SEED = 42
 SEEDS = [42, 43, 44]  # seeds for SVD and CV folds; both models use the same seeds
@@ -103,11 +105,28 @@ def doc_matrix(docs, E, index):
 
 
 def fit_predict(Xtr, ytr, Xte, seed):
-    """Logistic regression; C chosen by 5-fold CV on the training split only."""
+    """BASELINE classifier: logistic regression; C chosen by 5-fold CV on the training split only."""
     cv = StratifiedKFold(5, shuffle=True, random_state=seed)
     pipe = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000))
     grid = GridSearchCV(pipe, {"logisticregression__C": [0.1, 1.0, 10.0]},
                         cv=cv, scoring="f1_macro")
+    return grid.fit(Xtr, ytr).predict(Xte)
+
+
+def fit_predict_improved(Xtr, ytr, Xte, seed):
+    """IMPROVED classifier: model family + C/gamma chosen by 5-fold CV on the training split only.
+    Candidates: logistic regression (wider C grid) and RBF-SVM. Test set is not used."""
+    cv = StratifiedKFold(5, shuffle=True, random_state=seed)
+    pipe = Pipeline([("scale", StandardScaler()),
+                     ("clf", LogisticRegression(max_iter=2000))])
+    param_grid = [
+        {"clf": [LogisticRegression(max_iter=2000)],
+         "clf__C": [0.03, 0.1, 0.3, 1.0, 3.0, 10.0]},
+        {"clf": [SVC(kernel="rbf")],
+         "clf__C": [0.3, 1.0, 3.0, 10.0],
+         "clf__gamma": ["scale"]},
+    ]
+    grid = GridSearchCV(pipe, param_grid, cv=cv, scoring="f1_macro", n_jobs=1)
     return grid.fit(Xtr, ytr).predict(Xte)
 
 
@@ -161,11 +180,15 @@ def main():
     for seed in SEEDS:
         Eb = TruncatedSVD(DIM, random_state=seed).fit_transform(P_bg)  # U*S base vectors
         res = {}
-        for name, init in [("baseline", init_mean(C, Eb)), ("improved", init_attn(C, P, Eb))]:
+        runs = [
+            ("baseline", init_mean(C, Eb), fit_predict),
+            ("improved", init_attn(C, P, Eb), fit_predict_improved),
+        ]
+        for name, init, clf in runs:
             E = np.vstack([Eb, init])
             Xtr = doc_matrix(tr_docs, E, full)
             Xte = doc_matrix(te_docs, E, full)
-            pred = fit_predict(Xtr, y_tr, Xte, seed)
+            pred = clf(Xtr, y_tr, Xte, seed)
             res[name] = (f1_score(y_te, pred, average="macro"), accuracy_score(y_te, pred))
             print(f"   seed={seed} {name}: macro-F1={res[name][0]:.4f} acc={res[name][1]:.4f}")
         results.append(res)
@@ -187,8 +210,9 @@ def main():
                     "20 Newsgroups text when about 200 domain tokens are added?",
         "method": "PPMI-SVD base embeddings (300d, top-5000 background vocab) + ~200 new "
                   "downstream tokens initialised either by mean of window context vectors "
-                  "(baseline) or by PPMI-softmax-weighted context vectors (improved); document = "
-                  "mean token vector; logistic regression tuned by CV on train; macro-F1 on test.",
+                  "(baseline; logistic regression, C tuned by CV) or by PPMI-softmax-weighted "
+                  "context vectors (improved; attention init plus logistic-regression-or-RBF-SVM "
+                  "chosen and tuned by CV on train); document = mean token vector; macro-F1 on test.",
         "dataset": {
             "name": "20 Newsgroups (4 categories: " + ", ".join(DOWN) + ")",
             "source_url": SOURCE,
@@ -201,9 +225,12 @@ def main():
         "metric_name": "macro_f1",
         "higher_is_better": True,
         "baseline": "Mean-of-context initialization: each new token = unweighted mean of base "
-                    "vectors of words in its +/-5 co-occurrence window in downstream train text.",
+                    "vectors of words in its +/-5 co-occurrence window in downstream train text. "
+                    "Classifier: logistic regression with C tuned by 5-fold CV on train.",
         "improved": "Same contexts, but each context word weighted by a softmax over its PPMI "
-                    "score with the new token (attention-like weighting) before summing.",
+                    "score with the new token (attention-like weighting) before summing. "
+                    "Classifier: logistic regression or RBF-SVM, family and hyperparameters "
+                    "selected by 5-fold CV macro-F1 on train only.",
         "metrics": {
             "baseline_score": b_f1,
             "improved_score": i_f1,
@@ -219,7 +246,9 @@ def main():
         "notes": "New-token vectors are frozen initialisations (no fine-tuning). The paper's "
                  "exact token-distillation architecture is not given, so the attention is a "
                  "PPMI-softmax proxy. Only the 4 categories are used and the base embeddings "
-                 "come from the other 16 categories. Mean +/- std over seeds 42-44 (SVD and CV "
+                 "come from the other 16 categories. The improved model differs from the baseline "
+                 "in the initialisation and in the CV-tuned classifier search (LR vs RBF-SVM); "
+                 "the baseline classifier is unchanged. Mean +/- std over seeds 42-44 (SVD and CV "
                  "folds); the train/test split is fixed. Test set is used only for final scoring.",
     }
     with open("results.json", "w", encoding="utf-8") as f:

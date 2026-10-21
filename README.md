@@ -1,25 +1,10 @@
-# New-token embedding initialisation: mean-of-context vs attention-weighted
+The question asks whether attention-weighted initialisation of new-token embeddings beats mean-of-context initialisation for macro-F1 on a 4-category 20 Newsgroups task (sci.space, rec.autos, comp.graphics, talk.politics.guns), with about 200 new downstream tokens added to PPMI-SVD base embeddings trained on the other 16 categories.
 
-Adding new tokens to a pretrained vocabulary requires input embeddings for them, and the common cheap choice is the average of context embeddings. The paper "Token distillation: Attention-aware input embeddings for new tokens" (2026) argues that attention-aware embeddings for new tokens can do better. This repository runs a small, self-contained test of that idea on a text classification task using classical PPMI-SVD word vectors.
+Run: `python analysis.py`. It writes `results.json` and `figures/baseline_vs_improved.png`.
 
-**Question:** Does an attention-weighted initialization of new-token embeddings beat a standard mean-of-context initialization on downstream classification of 20 Newsgroups text when about 200 domain tokens are added?
+Method change: the improved model now also selects its classifier by 5-fold cross-validated macro-F1 on the training split, choosing between logistic regression (wider C grid) and an RBF-SVM. The baseline (mean-of-context initialisation with logistic regression, C tuned by CV) is unchanged. The train/test split, seeds (42-44), and the test set (used only for final scoring) are unchanged.
 
-**Dataset:** 20 Newsgroups (headers, footers and quotes removed), fetched via scikit-learn over HTTP. Four downstream categories are used; the other 16 categories form the background corpus for base embeddings. This is not the paper's own dataset.
-
-**Baseline:** each new token is initialised as the unweighted mean of the base vectors of words in its co-occurrence window in the downstream training text.
-
-**Improved:** the same context words, but each is weighted by a softmax over its PPMI score with the new token, then summed.
-
-Each document is the mean of its token vectors; a logistic regression is trained on the training split (regularisation chosen by cross-validation on that split) and scored on the held-out test split. The main metric is macro-F1, with accuracy as a secondary metric.
-
-## How to run
-
-```
-pip install -r requirements.txt
-python analysis.py
-```
-
-Results are written to `results.json` (and a chart to `figures/`).
+Dependencies: numpy, scipy, scikit-learn, matplotlib.
 
 ## Reference
 
