@@ -1,0 +1,30 @@
+{
+  "question": "Does an attention-weighted initialization of new-token embeddings beat a standard mean-of-context initialization on downstream classification of 20 Newsgroups text when about 200 domain tokens are added?",
+  "method": "PPMI-SVD base embeddings (300d, top-5000 background vocab) + ~200 new downstream tokens initialised either by mean of window context vectors (baseline; logistic regression, C tuned by CV) or by PPMI-softmax-weighted context vectors (improved; attention init plus logistic-regression-or-RBF-SVM chosen and tuned by CV on train); document = mean token vector; macro-F1 on test.",
+  "dataset": {
+    "name": "20 Newsgroups (4 categories: sci.space, rec.autos, comp.graphics, talk.politics.guns)",
+    "source_url": "https://scikit-learn.org/stable/datasets/real_world.html#the-20-newsgroups-text-dataset",
+    "n_rows": 3860,
+    "n_train": 2895,
+    "n_test": 965,
+    "same_as_paper": false,
+    "baseline_is_papers_method": false
+  },
+  "metric_name": "macro_f1",
+  "higher_is_better": true,
+  "baseline": "Mean-of-context initialization: each new token = unweighted mean of base vectors of words in its +/-5 co-occurrence window in downstream train text. Classifier: logistic regression with C tuned by 5-fold CV on train.",
+  "improved": "Same contexts, but each context word weighted by a softmax over its PPMI score with the new token (attention-like weighting) before summing. Classifier: logistic regression or RBF-SVM, family and hyperparameters selected by 5-fold CV macro-F1 on train only.",
+  "metrics": {
+    "baseline_score": 0.7883113718732958,
+    "improved_score": 0.8255067495673241,
+    "improvement": 0.03719537769402825,
+    "baseline_score_std": 0.007729678252514982,
+    "improved_score_std": 0.0008233851538084576,
+    "baseline_accuracy": 0.7882556131260795,
+    "improved_accuracy": 0.8234887737478411,
+    "baseline_accuracy_std": 0.007630646643998097,
+    "improved_accuracy_std": 0.0009770041881679342,
+    "n_new_tokens": 200
+  },
+  "notes": "New-token vectors are frozen initialisations (no fine-tuning). The paper's exact token-distillation architecture is not given, so the attention is a PPMI-softmax proxy. Only the 4 categories are used and the base embeddings come from the other 16 categories. The improved model differs from the baseline in the initialisation and in the CV-tuned classifier search (LR vs RBF-SVM); the baseline classifier is unchanged. Mean +/- std over seeds 42-44 (SVD and CV folds); the train/test split is fixed. Test set is used only for final scoring."
+}
